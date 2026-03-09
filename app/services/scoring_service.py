@@ -1,12 +1,19 @@
 import math
+import re
+from collections import Counter
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 from ..models.tables import PaperCandidate, Paper, ScoreDetail, RankingResult
 from ..config import scoring_config
 from ..integrations.gemini_client import score_method_relevance
+
+# 英語ストップワード（軽量版）
+_STOP_WORDS = frozenset(
+    "a an the and or but in on of to for is it that this with as at by from was were be been"
+    " are have has had not no will can do did its than so very which what when where who how"
+    " all also about up out if into over after between through during before".split()
+)
 
 # sentence-transformers を遅延ロード（起動時間への影響を最小化）
 # Streamlit環境では @st.cache_resource、それ以外ではグローバル変数でキャッシュ
@@ -35,13 +42,12 @@ def _calc_embed_scores(query_text: str, corpus: list[str]) -> list[float]:
     try:
         texts = [query_text] + corpus
         embeddings = model.encode(texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True)
-        query_vec = embeddings[0:1]
+        query_vec = embeddings[0]
         paper_vecs = embeddings[1:]
-        scores = cosine_similarity(query_vec, paper_vecs)[0]
-        # cosine similarity は -1〜1 だが正規化済みベクトルは 0〜1 に近い
-        scores = scores.clip(0, 1)
-        max_score = scores.max() if scores.max() > 0 else 1.0
-        return (scores / max_score).tolist()
+        # 正規化済みベクトルのdot productでcosine類似度を計算
+        scores = [max(float(query_vec @ pv), 0.0) for pv in paper_vecs]
+        max_score = max(scores) if scores and max(scores) > 0 else 1.0
+        return [s / max_score for s in scores]
     except Exception:
         return [0.0] * len(corpus)
 
@@ -294,16 +300,49 @@ def _build_paper_text(paper: Paper, use_abstract: bool = True) -> str:
     return " ".join(parts).lower()
 
 
+def _tokenize(text: str) -> list[str]:
+    """簡易トークナイザ：小文字化、非英数字除去、ストップワード除去。"""
+    return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in _STOP_WORDS and len(w) > 1]
+
+
 def _calc_tfidf_scores(query_text: str, corpus: list[str]) -> list[float]:
+    """純Python実装のTF-IDF cosine類似度（scikit-learn不要）。"""
     if not corpus:
         return []
     try:
-        vectorizer = TfidfVectorizer(max_features=5000, stop_words="english")
-        tfidf_matrix = vectorizer.fit_transform(corpus)
-        query_vec = vectorizer.transform([query_text.lower()])
-        scores = cosine_similarity(query_vec, tfidf_matrix)[0]
-        max_score = scores.max() if scores.max() > 0 else 1.0
-        return (scores / max_score).tolist()
+        tokenized_corpus = [_tokenize(doc) for doc in corpus]
+        query_tokens = _tokenize(query_text)
+
+        # DF（文書頻度）を計算
+        n_docs = len(tokenized_corpus)
+        df = Counter()
+        for tokens in tokenized_corpus:
+            df.update(set(tokens))
+        for token in set(query_tokens):
+            df[token] = df.get(token, 0)
+
+        # IDF
+        idf = {term: math.log((n_docs + 1) / (count + 1)) + 1 for term, count in df.items()}
+
+        def tfidf_vec(tokens):
+            tf = Counter(tokens)
+            return {term: (1 + math.log(count)) * idf.get(term, 1.0) for term, count in tf.items()}
+
+        def cosine_sim(v1, v2):
+            common = set(v1) & set(v2)
+            if not common:
+                return 0.0
+            dot = sum(v1[t] * v2[t] for t in common)
+            norm1 = math.sqrt(sum(v * v for v in v1.values()))
+            norm2 = math.sqrt(sum(v * v for v in v2.values()))
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+            return dot / (norm1 * norm2)
+
+        query_vec = tfidf_vec(query_tokens)
+        scores = [cosine_sim(query_vec, tfidf_vec(tokens)) for tokens in tokenized_corpus]
+        max_score = max(scores) if scores and max(scores) > 0 else 1.0
+        return [s / max_score for s in scores]
     except Exception:
         return [0.0] * len(corpus)
 
