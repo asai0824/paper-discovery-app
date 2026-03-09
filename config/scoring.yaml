@@ -1,0 +1,35 @@
+scoring:
+  theme:
+    embed_weight: 30    # embedding類似度（最重要）: 20→30
+    text_weight: 12     # TF-IDF: 10→12
+    keyword_weight: 8   # 指定キーワード一致: 5→8
+  method:
+    rule_weight: 10     # ルールベース手法一致（変更なし）
+    llm_weight: 15      # Gemini評価: 10→15
+  recency_weight: 12    # 新しさ: 15→12
+  impact_weight: 5      # 被引用数: 15→5（有名論文優遇を抑制）
+  readability_weight: 5 # 読みやすさ: 10→5
+  role_bonus_weight: 3  # 役割補正: 5→3
+
+  recency_thresholds:
+    - max_age: 2
+      norm: 1.0
+    - max_age: 5
+      norm: 0.8
+    - max_age: 8
+      norm: 0.6
+    - max_age: 12
+      norm: 0.4
+    - max_age: 9999
+      norm: 0.2
+
+llm:
+  enabled_for_top_n: 30
+  timeout_sec: 20
+  max_reason_length: 50
+
+openalex:
+  max_candidates: 200
+  per_page: 50
+
+scoring_version: "1.1"

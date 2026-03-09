@@ -1,0 +1,22 @@
+# 環境・秘密情報
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# SQLite DB（本番はクラウドDBを使用）
+*.db
+*.db-shm
+*.db-wal
+
+# その他
+.DS_Store
+*.egg-info/
+dist/
+build/
