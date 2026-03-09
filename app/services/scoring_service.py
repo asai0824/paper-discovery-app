@@ -106,6 +106,19 @@ def score_all(
     tfidf_scores = _calc_tfidf_scores(query_text, corpus)
     embed_scores = _calc_embed_scores(query_text, corpus)
 
+    # embedding無効時はテキスト・キーワードに重みを再配分して100点満点を維持
+    embed_available = any(s > 0 for s in embed_scores) if embed_scores else False
+    theme_cfg = CFG.get("theme", {})
+    if embed_available:
+        w_text = theme_cfg.get("text_weight", 12)
+        w_kw = theme_cfg.get("keyword_weight", 8)
+        w_embed = theme_cfg.get("embed_weight", 30)
+    else:
+        orig_embed = theme_cfg.get("embed_weight", 30)
+        w_text = theme_cfg.get("text_weight", 12) + int(orig_embed * 0.65)  # 12→31
+        w_kw = theme_cfg.get("keyword_weight", 8) + int(orig_embed * 0.35)  # 8→18
+        w_embed = 0
+
     rankings = []
     for i, candidate in enumerate(valid_candidates):
         paper = candidate.paper
@@ -115,9 +128,9 @@ def score_all(
         embed_norm = embed_scores[i] if i < len(embed_scores) else 0.0
 
         # --- テーマ一致度 ---
-        theme_text_score = CFG.get("theme", {}).get("text_weight", 10) * tfidf_norm
-        theme_keyword_score = _calc_keyword_score(include_list, paper_text)
-        theme_embed_score = CFG.get("theme", {}).get("embed_weight", 20) * embed_norm
+        theme_text_score = w_text * tfidf_norm
+        theme_keyword_score = _calc_keyword_score(include_list, paper_text, kw_weight=w_kw)
+        theme_embed_score = w_embed * embed_norm
         theme_score = theme_text_score + theme_keyword_score + theme_embed_score
 
         # --- 手法一致度（ルールベース）---
@@ -347,12 +360,14 @@ def _calc_tfidf_scores(query_text: str, corpus: list[str]) -> list[float]:
         return [0.0] * len(corpus)
 
 
-def _calc_keyword_score(include_terms: list[str], paper_text: str) -> float:
+def _calc_keyword_score(include_terms: list[str], paper_text: str, kw_weight: int | None = None) -> float:
     if not include_terms:
         return 0.0
+    if kw_weight is None:
+        kw_weight = CFG.get("theme", {}).get("keyword_weight", 8)
     matched = sum(1 for term in include_terms if term in paper_text)
     ratio = matched / len(include_terms)
-    return CFG.get("theme", {}).get("keyword_weight", 5) * ratio
+    return kw_weight * ratio
 
 
 def _calc_method_rule(paper_text: str) -> float:
