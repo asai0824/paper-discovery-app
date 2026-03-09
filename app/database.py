@@ -3,10 +3,12 @@ from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 from .config import settings
 
-_is_sqlite = settings.database_url.startswith("sqlite")
+# Supabase pooler URL の ?pgbouncer=true は psycopg2 非対応なので除去
+_db_url = settings.database_url.replace("?pgbouncer=true", "")
+_is_sqlite = _db_url.startswith("sqlite")
 
 engine = create_engine(
-    settings.database_url,
+    _db_url,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
     **({"pool_pre_ping": True, "pool_size": 5, "max_overflow": 10} if not _is_sqlite else {}),
 )
