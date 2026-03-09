@@ -10,4 +10,4 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 google-genai>=1.0.0
 python-dotenv>=1.0.0
-sentence-transformers>=2.2.0
+# sentence-transformers>=2.2.0  # ローカルのみ使用（pip install sentence-transformers）。Cloud環境ではPyTorchが重いため除外。
