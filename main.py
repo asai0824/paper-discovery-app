@@ -9,10 +9,11 @@ st.set_page_config(
 
 
 def _check_password() -> bool:
-    """パスワード認証。st.secretsに"password"キーがなければスキップ。"""
-    correct_password = st.secrets.get("password", None)
+    """パスワード認証。st.secretsまたは環境変数にpasswordがなければスキップ。"""
+    import os
+    correct_password = os.environ.get("STREAMLIT_SERVER_PASSWORD") or st.secrets.get("password", None)
     if correct_password is None:
-        return True  # secrets未設定時はローカル開発用としてスキップ
+        return True  # 未設定時はローカル開発用としてスキップ
 
     if st.session_state.get("authenticated"):
         return True
