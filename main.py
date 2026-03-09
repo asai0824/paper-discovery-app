@@ -37,11 +37,15 @@ from app.ui import search_page, candidate_page, review_page, history_page, doi_l
 
 @st.cache_resource(show_spinner="embeddingモデルを読み込み中...")
 def _preload_embed_model():
-    """アプリ起動時にembeddingモデルをロードしてキャッシュする（初回のみ実行）。"""
+    """アプリ起動時にembeddingモデルをロードしてキャッシュする（初回のみ実行）。
+    DISABLE_EMBEDDING=true の場合はスキップ。
+    """
+    import os
+    if os.environ.get("DISABLE_EMBEDDING", "").lower() == "true":
+        return None
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer("all-MiniLM-L6-v2")
-        # scoring_service のキャッシュにも登録する
         from app.services.scoring_service import _embed_model_cache
         _embed_model_cache["model"] = model
         return model

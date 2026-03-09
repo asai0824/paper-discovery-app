@@ -13,6 +13,9 @@ from ..integrations.gemini_client import score_method_relevance
 _embed_model_cache = {}
 
 def _get_embed_model():
+    import os
+    if os.environ.get("DISABLE_EMBEDDING", "").lower() == "true":
+        return None
     if "model" not in _embed_model_cache:
         try:
             from sentence_transformers import SentenceTransformer
